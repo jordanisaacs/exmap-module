@@ -618,25 +618,6 @@ exmap_alloc(struct exmap_ctx *ctx, struct exmap_action_params *params) {
 	if (iov_len == 0)
 		return failed;
 
-	/* allocate pages from the system if possible */
-	unsigned num_pages = iov_len;
-	while (unlikely(ctx->alloc_count < ctx->buffer_size) && num_pages > 0) {
-#ifdef USE_CONTIG_ALLOC
-		struct page* page = exmap_alloc_page_contig(ctx);
-#else
-		struct page* page = exmap_alloc_page_system();
-		ctx->alloc_count++;
-#endif
-		if (!page) {
-			pr_warn("exmap_alloc: no page, alloc=%lu, alloc_max=%lu, contig=%lu, contig_max=%lu\n",
-				ctx->alloc_count, ctx->buffer_size, ctx->contig_counter, ctx->contig_size);
-			break;
-		}
-		/* pr_info("exmap_alloc: push %lx on %d", page, iface); */
-		push_page(page, &interface->local_pages, ctx);
-		num_pages--;
-	}
-
 	/* add_mm_counter(current->mm, MM_FILEPAGES, iov_len - num_pages); */
 
 
@@ -646,15 +627,37 @@ exmap_alloc(struct exmap_ctx *ctx, struct exmap_action_params *params) {
 	struct exmap_pages_ctx pages_ctx = {
 		.ctx = ctx,
 		.interface = interface,
-		.pages_count = iov_len,
+		.pages_count = 0,
 	};
 
 	for (idx = 0; idx < iov_len; idx++) {
-		unsigned long uaddr;
+		unsigned long uaddr, num_pages;
 		struct exmap_iov ret, vec;
 		unsigned free_pages_before;
 
 		vec = READ_ONCE(interface->usermem->iov[idx]);
+
+		/* allocate pages from the system if possible */
+		num_pages = vec.len;
+		pages_ctx.pages_count += num_pages;
+		while (unlikely(ctx->alloc_count < ctx->buffer_size) && num_pages > 0) {
+#ifdef USE_CONTIG_ALLOC
+			struct page* page = exmap_alloc_page_contig(ctx);
+#else
+			struct page* page = exmap_alloc_page_system();
+			ctx->alloc_count++;
+#endif
+
+			if (!page) {
+				pr_warn("exmap_alloc: no page, alloc=%lu, alloc_max=%lu, contig=%u, contig_max=%lu\n",
+					ctx->alloc_count, ctx->buffer_size, ctx->contig_counter, ctx->contig_size);
+				break;
+			}
+			/* pr_info("exmap_alloc: push %lx on %d", page, iface); */
+			push_page(page, &interface->local_pages, ctx);
+			num_pages--;
+		}
+
 		uaddr = vma->vm_start + (vec.page << PAGE_SHIFT);
 		alloc_ctx.iov_cur = &vec;
 
