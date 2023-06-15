@@ -16,7 +16,7 @@
         src = ./module;
         outputs = ["out" "dev"];
 
-        buildInputs = [pkgs.nukeReferences];
+        buildInputs = [pkgs.nukeReferences pkgs.pahole];
         kernel = kernel.dev;
         kernelVersion = kernel.modDirVersion;
 
