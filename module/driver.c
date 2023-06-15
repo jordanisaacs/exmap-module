@@ -372,7 +372,7 @@ static int exmap_notifier_invalidate_range_start(struct mmu_notifier *mn, const 
 	struct exmap_ctx *ctx = mmu_notifier_to_exmap(mn);
 
     // Only cleanup the exmap_vma when it is the one being unmapped
-	if (ctx->interfaces && ctx->exmap_vma && ctx->exmap_vma == range->vma) {
+	if (ctx->interfaces && ctx->exmap_vma) {
 		exmap_vma_cleanup(ctx, range->start, range->end);
 	}
 	return 0;
@@ -410,8 +410,8 @@ static int exmap_mmap(struct file *file, struct vm_area_struct *vma) {
 
 		ctx->exmap_vma = vma;
 		vma->vm_ops   = &vm_ops;
-		vma->vm_flags |= VM_DONTEXPAND | VM_DONTDUMP | VM_NOHUGEPAGE | VM_DONTCOPY;
-		vma->vm_flags |= VM_MIXEDMAP; // required for vm_insert_page
+		vm_flags_set(vma, VM_DONTEXPAND | VM_DONTDUMP | VM_NOHUGEPAGE | VM_DONTCOPY);
+		vm_flags_set(vma, VM_MIXEDMAP); // required for vm_insert_page
 		vma->vm_private_data = ctx;
 		vm_open(vma);
 	} else if (offset >= EXMAP_OFF_INTERFACE_BASE && offset <= EXMAP_OFF_INTERFACE_MAX) {
@@ -1086,7 +1086,7 @@ static const struct file_operations fops = {
 	.unlocked_ioctl = exmap_ioctl
 };
 
-static int dev_uevent_perms(struct device *dev, struct kobj_uevent_env *env) {
+static int dev_uevent_perms(const struct device *dev, struct kobj_uevent_env *env) {
 	return add_uevent_var(env, "DEVMODE=%#o", 0666);
 }
 
